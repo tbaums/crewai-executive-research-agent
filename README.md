@@ -4,6 +4,18 @@ A multi-agent research system that generates executive-ready HTML reports for B2
 
 This project was built as a take-home exercise for a Sales Engineering / Field Engineering interview process.
 
+## View Finished Sample Reports
+
+These links are intended to give reviewers the fastest path to the finished product. When GitHub Pages is enabled for this repository, they open as rendered HTML reports rather than raw repository files.
+
+- [Finance: Procure-to-Pay](https://tbaums.github.io/crewai-executive-research-agent/reports/finance_procure_to_pay.html)
+- [HR: Employee Onboarding Automation](https://tbaums.github.io/crewai-executive-research-agent/reports/hr_employee_onboarding_automation.html)
+- [Healthcare: Prior Authorization Automation](https://tbaums.github.io/crewai-executive-research-agent/reports/healthcare_prior_authorization_automation.html)
+- [Cybersecurity: Third-Party Risk Management](https://tbaums.github.io/crewai-executive-research-agent/reports/cybersecurity_third_party_risk_management.html)
+- [Supply Chain: Demand Forecasting](https://tbaums.github.io/crewai-executive-research-agent/reports/supply_chain_demand_forecasting.html)
+
+Markdown versions and companion evaluation notes are also available in the `reports/` directory.
+
 ## Quickstart
 
 Create a virtual environment, install dependencies, copy the example environment file, add an OpenAI API key, and run the report generator.
@@ -14,6 +26,7 @@ Commands:
     source .venv/bin/activate
     pip install -r requirements.txt
     cp .env.example .env
+    # Edit .env and replace OPENAI_API_KEY=replace_me with a valid key.
     python -m executive_research.main "finance - procure-to-pay"
 
 Generated reports are written to the `reports/` directory as both Markdown and HTML.
@@ -84,7 +97,6 @@ HTML was selected because it is easy to open locally, easy to style, easy to sha
 ### Implementation philosophy
 
 This project intentionally prioritizes a small, reliable, explainable system over an elaborate demo. The goal is to show practical field-engineering judgment: clear architecture, reasonable defaults, working code, reproducible setup, and an output that can support a customer-facing conversation.
-
 
 ## Known Limitations and Production Next Steps
 
