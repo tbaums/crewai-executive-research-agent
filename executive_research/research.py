@@ -6,8 +6,10 @@ import time
 
 import requests
 import trafilatura
-from duckduckgo_search import DDGS
-
+try:
+    from ddgs import DDGS
+except ImportError:
+    from duckduckgo_search import DDGS
 
 @dataclass
 class Source:
@@ -59,7 +61,6 @@ def search_web(topic: str, max_results_per_query: int = 4) -> list[Source]:
             time.sleep(0.4)
 
     return results[:12]
-
 
 def extract_page_text(url: str, timeout: int = 12) -> str:
     if not url:
