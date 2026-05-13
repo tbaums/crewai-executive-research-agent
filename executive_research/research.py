@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Iterable
+from urllib.parse import urlparse
 import sys
 import time
 
@@ -23,6 +24,93 @@ def log(message: str) -> None:
     print(f"[{time.strftime('%H:%M:%S')}] {message}", file=sys.stderr, flush=True)
 
 
+BLOCKED_DOMAINS = {
+    "abcdocz.com",
+    "bing.com",
+    "brex.com",
+    "cfoiquk.com",
+    "coruzant.com",
+    "deepseekimagegenerator.com",
+    "desapandakgede.id",
+    "dragonsourcing.com",
+    "dualfinances.com",
+    "en.wikipedia.org",
+    "finance.yahoo.com",
+    "finansys.com",
+    "findarticles.com",
+    "lassosupplychain.com",
+    "linkedin.com",
+    "mercury.com",
+    "openpr.com",
+    "placement-officer.com",
+    "procurementtactics.com",
+    "realpage.com",
+    "shoppable.ph",
+    "sitnshow.com",
+    "startuphub.ai",
+    "transparentglobal.com",
+    "vsfpartners.com",
+    "visasponsor.jobs",
+}
+
+PREFERRED_DOMAINS = {
+    "bcg.com",
+    "coupa.com",
+    "deloitte.com",
+    "futuremarketinsights.com",
+    "gartner.com",
+    "ibm.com",
+    "kpmg.com",
+    "learn.microsoft.com",
+    "mckinsey.com",
+    "oracle.com",
+    "pwc.com",
+    "sap.com",
+}
+
+RELEVANCE_TERMS = {
+    "accounts payable",
+    "ap automation",
+    "invoice automation",
+    "invoice processing",
+    "procure-to-pay",
+    "procure to pay",
+    "procurement automation",
+    "purchase-to-pay",
+    "source-to-pay",
+    "supplier invoice",
+}
+
+def source_domain(url: str) -> str:
+    return urlparse(url).netloc.lower().removeprefix("www.")
+
+def domain_matches(domain: str, blocked_domain: str) -> bool:
+    return domain == blocked_domain or domain.endswith(f".{blocked_domain}")
+
+
+def is_ad_or_redirect_url(url: str) -> bool:
+    parsed = urlparse(url)
+    domain = parsed.netloc.lower().removeprefix("www.")
+    path = parsed.path.lower()
+    return (
+        domain in {"bing.com", "google.com", "doubleclick.net"}
+        or "/aclick" in path
+        or "doubleclick" in domain
+    )
+
+
+def is_allowed_source(url: str) -> bool:
+    domain = source_domain(url)
+    if not domain:
+        return False
+    if is_ad_or_redirect_url(url):
+        return False
+    return not any(domain_matches(domain, blocked_domain) for blocked_domain in BLOCKED_DOMAINS)
+
+def is_relevant_source(title: str, url: str, snippet: str) -> bool:
+    haystack = " ".join([title, url, snippet]).lower()
+    return any(term in haystack for term in RELEVANCE_TERMS)
+
 def build_queries(topic: str) -> list[str]:
     base = topic.strip()
     return [
@@ -33,7 +121,7 @@ def build_queries(topic: str) -> list[str]:
     ]
 
 
-def search_web(topic: str, max_results_per_query: int = 4) -> list[Source]:
+def search_web(topic: str, max_results_per_query: int = 8) -> list[Source]:
     results: list[Source] = []
     seen_urls: set[str] = set()
 
@@ -46,13 +134,21 @@ def search_web(topic: str, max_results_per_query: int = 4) -> list[Source]:
                     url = item.get("href") or item.get("url") or ""
                     if not url or url in seen_urls:
                         continue
+                    title = item.get("title") or "Untitled source"
+                    snippet = item.get("body") or ""
+                    if not is_allowed_source(url):
+                        log(f"Skipping blocked source: {url}")
+                        continue
+                    if not is_relevant_source(title, url, snippet):
+                        log(f"Skipping low-relevance source: {url}")
+                        continue
 
                     seen_urls.add(url)
                     results.append(
                         Source(
-                            title=item.get("title") or "Untitled source",
+                            title=title,
                             url=url,
-                            snippet=item.get("body") or "",
+                            snippet=snippet,
                         )
                     )
             except Exception as exc:
@@ -67,6 +163,9 @@ def search_web(topic: str, max_results_per_query: int = 4) -> list[Source]:
 
             time.sleep(0.4)
 
+    results.sort(
+        key=lambda source: source_domain(source.url) not in PREFERRED_DOMAINS
+    )
     log(f"Search complete: {len(results[:12])} unique sources selected")
     return results[:12]
 
