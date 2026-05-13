@@ -48,6 +48,8 @@ BLOCKED_DOMAINS = {
     "shoppable.ph",
     "sitnshow.com",
     "startuphub.ai",
+    "tesladigitalhq.com",
+    "tiktok.com",
     "transparentglobal.com",
     "vsfpartners.com",
     "visasponsor.jobs",
@@ -68,18 +70,26 @@ PREFERRED_DOMAINS = {
     "sap.com",
 }
 
-RELEVANCE_TERMS = {
-    "accounts payable",
-    "ap automation",
-    "invoice automation",
-    "invoice processing",
-    "procure-to-pay",
-    "procure to pay",
-    "procurement automation",
-    "purchase-to-pay",
-    "source-to-pay",
-    "supplier invoice",
+GENERIC_RELEVANCE_TERMS = {
+    "AI",
+    "automation",
+    "enterprise",
+    "market",
+    "platform",
+    "software",
+    "startup",
+    "technology",
+    "vendor",
 }
+
+def topic_relevance_terms(topic: str) -> set[str]:
+    normalized_topic = topic.lower().replace("-", " ")
+    terms = {
+        normalized_topic.strip(),
+        *[part.strip() for part in normalized_topic.split() if len(part.strip()) > 3],
+        *GENERIC_RELEVANCE_TERMS,
+    }
+    return {term for term in terms if term}
 
 def source_domain(url: str) -> str:
     return urlparse(url).netloc.lower().removeprefix("www.")
@@ -107,17 +117,17 @@ def is_allowed_source(url: str) -> bool:
         return False
     return not any(domain_matches(domain, blocked_domain) for blocked_domain in BLOCKED_DOMAINS)
 
-def is_relevant_source(title: str, url: str, snippet: str) -> bool:
-    haystack = " ".join([title, url, snippet]).lower()
-    return any(term in haystack for term in RELEVANCE_TERMS)
+def is_relevant_source(topic: str, title: str, url: str, snippet: str) -> bool:
+    haystack = " ".join([title, url, snippet]).lower().replace("-", " ")
+    return any(term.lower() in haystack for term in topic_relevance_terms(topic))
 
 def build_queries(topic: str) -> list[str]:
     base = topic.strip()
     return [
         f"{base} market trends 2025",
         f"{base} startups vendors AI automation",
-        f"{base} enterprise pain points CFO procurement",
-        f"{base} analyst report procure to pay accounts payable automation",
+        f"{base} enterprise pain points buyers",
+        f"{base} analyst report enterprise software automation",
     ]
 
 
@@ -139,7 +149,7 @@ def search_web(topic: str, max_results_per_query: int = 8) -> list[Source]:
                     if not is_allowed_source(url):
                         log(f"Skipping blocked source: {url}")
                         continue
-                    if not is_relevant_source(title, url, snippet):
+                    if not is_relevant_source(topic, title, url, snippet):
                         log(f"Skipping low-relevance source: {url}")
                         continue
 
