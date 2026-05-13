@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import re
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -11,7 +12,7 @@ from crewai import Agent, Crew, LLM, Process, Task
 from dotenv import load_dotenv
 import markdown as markdown_lib
 
-from executive_research.research import gather_research_context, format_sources
+from executive_research.research import gather_research_context, format_sources, log
 
 
 def slugify(value: str) -> str:
@@ -23,10 +24,12 @@ def slugify(value: str) -> str:
 
 def make_llm() -> LLM:
     model = os.getenv("OPENAI_MODEL", "gpt-4.1")
+    log(f"Initializing LLM: {model}")
     return LLM(model=model, temperature=0.2)
 
 
 def build_crew(topic: str, research_context: str, source_list: str) -> Crew:
+    log("Building CrewAI agents and tasks")
     llm = make_llm()
 
     planner = Agent(
@@ -35,7 +38,7 @@ def build_crew(topic: str, research_context: str, source_list: str) -> Crew:
         backstory="You scope ambiguous B2B research questions quickly and clearly.",
         llm=llm,
         allow_delegation=False,
-        verbose=False,
+        verbose=True,
     )
 
     industry_researcher = Agent(
@@ -44,7 +47,7 @@ def build_crew(topic: str, research_context: str, source_list: str) -> Crew:
         backstory="You understand enterprise operations, procurement, finance, and SaaS buying committees.",
         llm=llm,
         allow_delegation=False,
-        verbose=False,
+        verbose=True,
     )
 
     vendor_researcher = Agent(
@@ -53,7 +56,7 @@ def build_crew(topic: str, research_context: str, source_list: str) -> Crew:
         backstory="You track B2B software markets and translate vendor noise into useful executive signal.",
         llm=llm,
         allow_delegation=False,
-        verbose=False,
+        verbose=True,
     )
 
     synthesizer = Agent(
@@ -62,9 +65,10 @@ def build_crew(topic: str, research_context: str, source_list: str) -> Crew:
         backstory="You write concise, board-ready research briefs for senior operators and technology buyers.",
         llm=llm,
         allow_delegation=False,
-        verbose=False,
+        verbose=True,
     )
 
+    log("Defining CrewAI task: research plan")
     plan_task = Task(
         description=(
             f"Create a focused research plan for this topic: {topic}.\n\n"
@@ -74,6 +78,7 @@ def build_crew(topic: str, research_context: str, source_list: str) -> Crew:
         agent=planner,
     )
 
+    log("Defining CrewAI task: industry analysis")
     industry_task = Task(
         description=(
             f"Using the source context below, analyze industry trends and buyer pain points for: {topic}.\n\n"
@@ -85,6 +90,7 @@ def build_crew(topic: str, research_context: str, source_list: str) -> Crew:
         context=[plan_task],
     )
 
+    log("Defining CrewAI task: vendor landscape")
     vendor_task = Task(
         description=(
             f"Using the same source context, analyze vendor and startup activity for: {topic}.\n\n"
@@ -96,6 +102,7 @@ def build_crew(topic: str, research_context: str, source_list: str) -> Crew:
         context=[plan_task],
     )
 
+    log("Defining CrewAI task: executive synthesis")
     synthesis_task = Task(
         description=(
             f"Write an executive-ready Markdown report on: {topic}.\n\n"
@@ -118,12 +125,23 @@ def build_crew(topic: str, research_context: str, source_list: str) -> Crew:
         context=[industry_task, vendor_task],
     )
 
-    return Crew(
+    crew = Crew(
         agents=[planner, industry_researcher, vendor_researcher, synthesizer],
         tasks=[plan_task, industry_task, vendor_task, synthesis_task],
         process=Process.sequential,
-        verbose=False,
+        verbose=True,
     )
+    log("CrewAI crew ready: 4 agents, 4 sequential tasks")
+    return crew
+
+
+def run_crew_with_logging(crew: Crew) -> str:
+    log("Starting CrewAI kickoff")
+    start = time.monotonic()
+    result = crew.kickoff()
+    elapsed = time.monotonic() - start
+    log(f"CrewAI kickoff complete in {elapsed:.1f}s")
+    return str(result)
 
 
 def render_html(topic: str, markdown_report: str) -> str:
@@ -163,18 +181,20 @@ def main() -> int:
         return 1
 
     topic = " ".join(sys.argv[1:]).strip() or "finance - procure-to-pay"
-    print(f"Research topic: {topic}")
-    print("Gathering public web context...")
+    print(f"Research topic: {topic}", flush=True)
+    print("Gathering public web context...", flush=True)
 
     research_context, sources = gather_research_context(topic)
     source_list = format_sources(sources)
 
-    print(f"Collected {len(sources)} source candidates.")
-    print("Running CrewAI agents...")
+    print(f"Collected {len(sources)} source candidates.", flush=True)
+    log(f"Research context length: {len(research_context)} chars")
+    log(f"Source list length: {len(source_list)} chars")
+    print("Running CrewAI agents...", flush=True)
 
     crew = build_crew(topic, research_context, source_list)
-    result = crew.kickoff()
-    markdown_report = str(result)
+    markdown_report = run_crew_with_logging(crew)
+    log(f"Markdown report length: {len(markdown_report)} chars")
 
     reports_dir = Path("reports")
     reports_dir.mkdir(exist_ok=True)
@@ -182,11 +202,13 @@ def main() -> int:
     markdown_path = reports_dir / f"{slug}.md"
     html_path = reports_dir / f"{slug}.html"
 
+    log(f"Writing Markdown report: {markdown_path}")
     markdown_path.write_text(markdown_report)
+    log(f"Writing HTML report: {html_path}")
     html_path.write_text(render_html(topic, markdown_report))
 
-    print(f"Markdown report written to: {markdown_path}")
-    print(f"HTML report written to: {html_path}")
+    print(f"Markdown report written to: {markdown_path}", flush=True)
+    print(f"HTML report written to: {html_path}", flush=True)
     return 0
 
 
