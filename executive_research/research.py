@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Iterable
+import sys
 import time
 
 import requests
@@ -18,6 +19,9 @@ class Source:
     snippet: str
     extracted_text: str = ""
 
+def log(message: str) -> None:
+    print(f"[{time.strftime('%H:%M:%S')}] {message}", file=sys.stderr, flush=True)
+
 
 def build_queries(topic: str) -> list[str]:
     base = topic.strip()
@@ -33,8 +37,10 @@ def search_web(topic: str, max_results_per_query: int = 4) -> list[Source]:
     results: list[Source] = []
     seen_urls: set[str] = set()
 
+    log(f"Searching web for topic: {topic}")
     with DDGS() as ddgs:
         for query in build_queries(topic):
+            log(f"Search query: {query}")
             try:
                 for item in ddgs.text(query, max_results=max_results_per_query):
                     url = item.get("href") or item.get("url") or ""
@@ -50,6 +56,7 @@ def search_web(topic: str, max_results_per_query: int = 4) -> list[Source]:
                         )
                     )
             except Exception as exc:
+                log(f"Search failed for query: {query} ({exc})")
                 results.append(
                     Source(
                         title=f"Search failed for query: {query}",
@@ -60,29 +67,20 @@ def search_web(topic: str, max_results_per_query: int = 4) -> list[Source]:
 
             time.sleep(0.4)
 
+    log(f"Search complete: {len(results[:12])} unique sources selected")
     return results[:12]
 
-def extract_page_text(url: str, timeout: int = 12) -> str:
+def extract_page_text(url: str, timeout: int = 8) -> str:
     if not url:
         return ""
 
-    try:
-        downloaded = trafilatura.fetch_url(url)
-        if downloaded:
-            extracted = trafilatura.extract(
-                downloaded,
-                include_comments=False,
-                include_tables=False,
-            )
-            if extracted:
-                return extracted[:3500]
-    except Exception:
-        pass
+    start = time.monotonic()
+    log(f"Fetching source: {url}")
 
     try:
         response = requests.get(
             url,
-            timeout=timeout,
+            timeout=(4, timeout),
             headers={"User-Agent": "Mozilla/5.0"},
         )
         response.raise_for_status()
@@ -91,16 +89,25 @@ def extract_page_text(url: str, timeout: int = 12) -> str:
             include_comments=False,
             include_tables=False,
         )
-        return (extracted or "")[:3500]
-    except Exception:
+        elapsed = time.monotonic() - start
+        if extracted:
+            log(f"Fetched source in {elapsed:.1f}s ({len(extracted)} chars extracted)")
+            return extracted[:3500]
+        log(f"Fetched source in {elapsed:.1f}s (no extractable text)")
+        return ""
+    except Exception as exc:
+        elapsed = time.monotonic() - start
+        log(f"Skipped source after {elapsed:.1f}s: {exc}")
         return ""
 
 
 def gather_research_context(topic: str) -> tuple[str, list[Source]]:
     sources = search_web(topic)
+    log(f"Extracting text from {len(sources)} sources")
     enriched: list[Source] = []
 
-    for source in sources:
+    for idx, source in enumerate(sources, start=1):
+        log(f"Processing source {idx}/{len(sources)}: {source.title}")
         text = extract_page_text(source.url)
         enriched.append(
             Source(
