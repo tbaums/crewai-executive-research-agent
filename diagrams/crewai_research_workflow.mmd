@@ -1,0 +1,18 @@
+flowchart LR
+    topic["Research Topic<br/>finance - procure-to-pay"]
+
+    subgraph crew["CrewAI Research Crew"]
+        planner["Research Planner<br/>Scope the question"]
+        industry["Industry Researcher<br/>Market context + buyer pain"]
+        vendor["Startup / Vendor Researcher<br/>Entrants + innovation signals"]
+        synth["Executive Synthesizer<br/>Recommendations + briefing"]
+    end
+
+    sources["Approved / public sources<br/>Web, filings, research, CRM, internal KBs"]
+    controls["Enterprise controls<br/>source scoring, citations, recency, human review"]
+    report["Executive-ready report<br/>HTML + Markdown"]
+
+    topic --> planner --> industry --> vendor --> synth --> report
+    sources --> industry
+    sources --> vendor
+    controls --> report
